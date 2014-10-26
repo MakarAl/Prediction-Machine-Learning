@@ -1,0 +1,84 @@
+---
+title: 'Human Activity Recognition: Practical Case of Identifying Proper Technique
+  of Weight Lifting Exercises'
+author: "A.D. Makarov"
+date: "19th October 2014"
+output: html_document
+---
+#Abstract
+The following report describes the prediction model built to recognize whether the weight-lifting exercise was performed well or not and what kind of mistake was made by subject depending on the data collected from the set of the wearable human activity tracking devices put on the different parts of the subject's body. The steps included obtaining the raw data, cleaning up training and test datasets, building the random forest classification model and predicting the outcomes from the observations stored in test set.
+
+#Data processing and exploration
+The data was downloaded from the Groupware@LES research cloud storage and available at the following links: [Training set](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) and [Test set](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv). The data is collected during the **Human Activity Recognition** research and relates to the data collected from the wearable physical activity recognition devices put onto a number of sportsmen who performed a set of the exercises. The goal was to build a model that will decide whether the exercise was performed properly ('classe' is A) or what type of mistake was made ('classe' is either B, C, D or E) depending on the data collected from those wearable devices put on the subjects.
+
+When we read the data we can observe that this is the large dataset with a big number of variables and a lot of missing values though. Thus, the first goal is to clean up the data by deleting the variables and observations with missing values and removing any metadata variables from the dataset, leaving only meaningful variables that can help us to build a valid prediction model.
+
+Important note is to proceed with the cleaning operations on both training and testing dataset to make sure that testing set will have all the necessary features to run through the model built on the training set.
+
+What is more, we need to keep variable 'classe' in train set, which is dependent variable we will classify on.
+
+```{r,cache=TRUE}
+trainURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+download.file(trainURL, "pml-training.csv", method = "curl")
+download.file(testURL, "pml-test.csv", method = "curl")
+
+trainPML <- read.csv("pml-training.csv", header = TRUE, na.strings = c("", "NA", "#DIV/0!"))
+testPML <- read.csv("pml-test.csv", header = TRUE, na.strings = c("", "NA", "#DIV/0!"))
+
+trainNA <- is.na(trainPML)
+testNA <- is.na(testPML)
+
+temp1 <- colSums(trainNA)
+temp2 <- colSums(testNA)
+
+notNANames <- intersect(names(temp1[temp1 == 0]), names(temp2[temp2 == 0]))
+testPML <- subset(testPML, select = notNANames)
+notNANames <- c(notNANames, "classe")
+trainPML <- subset(trainPML, select = notNANames)
+
+trainPML <- trainPML[,-c(1,3:7)]
+testPML <- testPML[,-c(1,3:7)]
+```
+
+As it can be inferred from the dimensions of the tidy dataset, we have kept 53 independent variables in both datasets and `classe` variable in training set to build the model predicting its outcome depending on the rest 53 variables.
+
+```{r, cache=TRUE}
+list(dim(trainPML),dim(testPML))
+```
+
+#Building Prediction Model
+The variable that is to be predicted is the classification of whether the subject did the exercise properly or not and if not than what went wrong. In other words, this is the factor variable and we need to build the model, which will capture the right class relying on the continuous quantitative output produced by the sensors on the subject. The adequate technique for this type of predicted variable is building the classification tree. However, taking into account the large number of observations and variables it might be better to apply some bagging methods for the model we build and expand CART method to building Random Forest model for this classification problem.
+
+The model consists of 500 randomly built classification trees, which majority vote is the outcome for the particular observation prediction. As it can be seen in the output below, the model demonstrates very small in-sample error rate, which allows us to rely on this model when trying to predict the outcomes on the test set.
+
+```{r, cache = TRUE}
+library(randomForest)
+
+modRF <- randomForest(classe ~., data = trainPML, ntree = 500)
+modRF
+```
+
+The final step is to predict the `classe` outcomes from the test set using the random forest model stored in `modRF` object.
+
+```{r, cache=TRUE}
+answers <- predict(modRF, newdata = testPML)
+```
+
+#Results
+The results were written to the separate *txt* files for submission by means of pre-defined function 'pml_write_files'. 
+
+```{r, cache = TRUE}
+answers
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(answers)
+```
